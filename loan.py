@@ -1,107 +1,143 @@
 import pandas as pd
 import numpy as np
-import seaborn as sns 
+import seaborn as sns
 import matplotlib.pyplot as plt
 import plotly.express as px
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+from sklearn.metrics import accuracy_score
 from sklearn.ensemble import RandomForestClassifier
-
-import pickle
-
 import streamlit as st
+from matplotlib.ticker import MaxNLocator
+from matplotlib.ticker import FuncFormatter
 
-st.set_page_config(layout='wide')
-df=pd.read_csv("Loan approval prediction.csv")
-pd.options.display.float_format = '{:,.2f}'.format  
-# Add column to make EDA more easier
+
+# Streamlit Configurations
+st.set_page_config(layout="wide")
+st.title("Loan Approval Analysis and Prediction App")
+
+# Load Dataset
+df = pd.read_csv("Loan approval prediction.csv")
+df = df.drop(columns=["id"])  # Drop unnecessary columns
 df['Age Level'] = pd.cut(
     df['person_age'],
-    bins=[19, 25, 35, 45],  # Define the bins
-    labels=['Level 1', 'Level 2', 'Level 3'],  # Define the labels for each bin
-    right=True  # Include the rightmost edge of the interval
+    bins=[19, 25, 35, 46],
+    labels=['20-24', '25-34', '35-45'],
+    right=True
 )
-#sidebar
-option = st.sidebar.selectbox("Pick a choice:",['Home','EDA','ML'])
-if option == 'Home':
-    st.title("Loan Approval App")
-    st.text('Author: Yara Khaled')
-    st.header("Dataset Preview")
-    st.dataframe(df.head(20))
-    st.subheader('Summary of Numerical Columns: ')
-    st.write( df.describe())
-    st.subheader("Summary of Object Columns")
-    st.write(df.describe(include='object'))
-    df.isna().sum()
-    df = df.drop(columns=['id'])
+df['loan_status'] = df['loan_status'].replace({0: 'Not Approved', 1: 'Approved'})
+df['loan_grade'] = df['loan_grade'].replace({
+    'A': 'Excellent Credit',
+    'B': 'Good Credit',
+    'C': 'Fair Credit',
+    'D': 'Poor Credit',
+    'E': 'Very Poor Credit',
+    'F': 'Creditworthiness',
+    'G': 'No Credit Score'  # or any other meaning for 'G'
+})
+# Sidebar Options
+option = st.sidebar.selectbox("Choose a Section", ["Home", "EDA", "ML"])
 
-####################################################################################################################
+if option == "Home":
+    st.header("Dataset Overview")
+    st.dataframe(df.head())
+    st.write("### Summary of Numerical Columns")
+    st.write(df.describe())
+    st.write("### Summary of Categorical Columns")
+    st.write(df.describe(include="object"))
 
-elif option =='EDA':
-    st.title("Loan Approval Exploratory Data Analysis")
-    st.subheader("Distributions of Numerical Features")
+elif option == "EDA":
+    st.header("Exploratory Data Analysis (EDA)")
+    
+    # Add Outlier Analysis Section
+    with st.expander("Advanced Options: Outlier Analysis", expanded=False):
+        st.subheader("Outlier Visualizations")
+        numerical_columns = [
+            "person_age", "person_income", "person_emp_length", 
+            "loan_amnt", "loan_int_rate", "loan_percent_income", 
+            "cb_person_cred_hist_length"
+        ]
+        selected_column = st.selectbox("Select Column for Outlier Analysis", numerical_columns)
+        
+        df_age_above_45 = df[df["person_age"] <= 45]
+        filtered_age_income = df_age_above_45[df_age_above_45["person_income"] <= 150000]
+        filtered_df = filtered_age_income[filtered_age_income["person_emp_length"] <= 15]
+        df_after_outliers = filtered_df[filtered_df["loan_amnt"] <= 25000]
 
-    # Numerical columns to analyze
-    numerical_columns = [
-    "person_age",
-    "person_income",
-    "person_emp_length",
-    "loan_amnt",
-    "loan_int_rate",
-    "loan_percent_income",
-    "cb_person_cred_hist_length",
-]
-
-    # Filtered dataset after handling outliers
-    df_age_above_45 = df[df["person_age"] <= 45]
-    filtered_age_income = df_age_above_45[df_age_above_45["person_income"] <= 150000]
-    filtered_df = filtered_age_income[df_age_above_45["person_emp_length"] <= 15]
-    df_after_outliers = filtered_df[filtered_df["loan_amnt"] <= 25000]
-
-    # Tabs for each numerical column
-    for col in numerical_columns:
-        st.write(f"## Analysis for {col}")
-        # Create three tabs for each column
+        # Create tabs for visualization
         tab1, tab2, tab3 = st.tabs(["Box Plot", "Histogram Before Outliers", "Histogram After Outliers"])
 
         # Tab 1: Box Plot
         with tab1:
-            st.write(f"### Box Plot for {col}")
+            st.write(f"### Box Plot for {selected_column}")
             fig_box, ax_box = plt.subplots()
-            sns.boxplot(x=df[col], ax=ax_box, color="skyblue")
-            ax_box.set_title(f"Box Plot of {col}")
+            sns.boxplot(x=df[selected_column], ax=ax_box, color="skyblue")
+            ax_box.set_title(f"Box Plot of {selected_column}")
             st.pyplot(fig_box)
 
         # Tab 2: Histogram Before Handling Outliers
         with tab2:
-            st.write(f"### Histogram for {col} (Before Handling Outliers)")
+            st.write(f"### Histogram for {selected_column} (Before Handling Outliers)")
             fig_hist_before, ax_hist_before = plt.subplots()
-            sns.histplot(df[col], kde=True, bins=30, color="blue", ax=ax_hist_before)
-            ax_hist_before.set_title(f"Distribution of {col} (Before Handling Outliers)")
-            ax_hist_before.set_xlabel(col)
+            sns.histplot(df[selected_column], kde=True, bins=30, color="blue", ax=ax_hist_before)
+            ax_hist_before.set_title(f"Distribution of {selected_column} (Before Handling Outliers)")
+            ax_hist_before.set_xlabel(selected_column)
             ax_hist_before.set_ylabel("Frequency")
             st.pyplot(fig_hist_before)
 
         # Tab 3: Histogram After Handling Outliers
         with tab3:
-            st.write(f"### Histogram for {col} (After Handling Outliers)")
+            st.write(f"### Histogram for {selected_column} (After Handling Outliers)")
             fig_hist_after, ax_hist_after = plt.subplots()
-            sns.histplot(df_after_outliers[col], kde=True, bins=30, color="green", ax=ax_hist_after)
-            ax_hist_after.set_title(f"Distribution of {col} (After Handling Outliers)")
-            ax_hist_after.set_xlabel(col)
+            sns.histplot(df_after_outliers[selected_column], kde=True, bins=30, color="green", ax=ax_hist_after)
+            ax_hist_after.set_title(f"Distribution of {selected_column} (After Handling Outliers)")
+            ax_hist_after.set_xlabel(selected_column)
             ax_hist_after.set_ylabel("Frequency")
             st.pyplot(fig_hist_after)
     
-    st.subheader("Add Age Level Column")
-    df['Age Level'] = pd.cut(
-        df['person_age'],
-        bins=[19, 25, 35, 45],
-        labels=['Level 1', 'Level 2', 'Level 3'],
-        right=True
-    )
+    
+    categorical_columns = df.select_dtypes(include=['object']).columns
 
+    # Function to format column names: Capitalize the first letter of each word and replace underscores with spaces
+    def format_column_name(col):
+        return col.replace('_', ' ').title()
+
+    # Apply formatting to the columns in the select box
+    formatted_columns = [format_column_name(col) for col in categorical_columns]
+
+    # Create a select box for the user to choose a categorical column
+    selected_column = st.selectbox("Select a categorical column", formatted_columns)
+
+    # Display the value counts for the selected column and plot a bar chart
+    if selected_column:
+        # Convert the formatted name back to the original column name
+        original_column_name = categorical_columns[formatted_columns.index(selected_column)]
+        
+        # Format the column name for the subheader
+        formatted_column_name = selected_column
+        
+        # Display the subheader with the formatted column name
+        st.subheader(f"Value Counts of {formatted_column_name}")
+        
+        st.write(f"Below is the value count distribution for {formatted_column_name}:")
+        
+        value_counts = df[original_column_name].value_counts()
+
+        # Plotting the bar chart using seaborn
+        fig, ax = plt.subplots()
+        sns.barplot(x=value_counts.index, y=value_counts.values, ax=ax, palette="Set2")
+        ax.set_title(f"Value Counts of {formatted_column_name}")
+        
+        # Formatting the axis labels: Capitalize the first letter and replace underscores with spaces
+        ax.set_xlabel(formatted_column_name)
+        ax.set_ylabel("Count")
+
+        # Adjust x-axis labels to avoid overlap
+        plt.xticks(rotation=45, ha='right', fontsize=10)  # Rotate and resize labels
+        st.pyplot(fig)
+    
+    
     # Loan Status Count by Age Level
     st.subheader("Loan Status Count by Age Level")
     grouped_data = df.groupby(["Age Level", "loan_status"])["loan_status"].count().reset_index(name="count")
@@ -118,7 +154,6 @@ elif option =='EDA':
     ages_level = df.groupby(["Age Level", "loan_intent"])["loan_intent"] \
         .count() \
         .reset_index(name="count")
-
     fig = px.bar(
         ages_level,
         x="Age Level",
@@ -128,7 +163,8 @@ elif option =='EDA':
         title="Loan Intent Distribution Across Age Levels",
         labels={"count": "Loan Intent Count", "loan_intent": "Loan Intent"},
         barmode="group",
-        hover_name="loan_intent"
+        hover_name="loan_intent",
+        color_discrete_sequence=px.colors.qualitative.Set2  # Set the color palette to Set2
     )
     st.plotly_chart(fig)
 
@@ -149,17 +185,35 @@ elif option =='EDA':
 
     # Create the first row of charts (3 columns)
     cols1 = st.columns(3)  # Three columns for the first row
+
+# Use the 'Set2' color palette, which has 8 colors by default
+    colors = plt.get_cmap('Set2').colors
+
     for i, intent in enumerate(first_row_intents):
         with cols1[i]:
             fig, ax = plt.subplots(figsize=(4, 4))  # Adjust size for consistency
+            
+            # Extract the data for the current intent
             intent_percentage = percentages.xs(key=intent, level=0)
+            
+            # Ensure the colors repeat or scale with the number of categories
+            num_colors = len(intent_percentage)
+            # Extend the colors list if the number of categories exceeds the available colors
+            extended_colors = colors * (num_colors // len(colors)) + colors[:num_colors % len(colors)]
+
+            # Create the pie chart
             wedges, texts, autotexts = ax.pie(
                 intent_percentage,
                 labels=intent_percentage.index,
                 autopct='%1.1f%%',
-                startangle=90
+                startangle=90,
+                colors=extended_colors  # Use the extended color list
             )
+            
+            # Set title and show the pie chart
             ax.set_title(f"Loan Status Distribution for {intent}")
+            
+            # Show the pie chart in Streamlit
             st.pyplot(fig)
 
     # Create the second row of charts (3 columns)
@@ -251,7 +305,8 @@ elif option =='EDA':
 
     # Set up the plot
     fig, ax = plt.subplots(figsize=(10, 6))
-    home_ownership_loan_status.plot(kind='bar', ax=ax, color=sns.color_palette("RdYlGn", 2))
+    sns.set_palette("Set2")
+    home_ownership_loan_status.plot(kind='bar', ax=ax)
 
     # Set labels and title
     ax.set_xlabel('Home Ownership Status')
@@ -264,10 +319,19 @@ elif option =='EDA':
     # Income vs Loan Amount
     st.subheader("Scatter Plot of Income vs Loan Amount")
     fig, ax = plt.subplots()
+
+    # Scatter plot
     ax.scatter(df['person_income'], df['loan_amnt'], alpha=0.6, edgecolor='k')
+
+    # Titles and labels
     ax.set_title("Scatter Plot of Income vs Loan Amount")
     ax.set_xlabel("Person Income")
     ax.set_ylabel("Loan Amount")
+
+    # Format X-axis to show numbers in thousands (K)
+    ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f'{x/1000:.0f}K'))
+
+    # Show the plot
     st.pyplot(fig)
 
     # Heatmap of Correlation
@@ -277,8 +341,6 @@ elif option =='EDA':
     sns.heatmap(corr_matrix, annot=True, cmap="coolwarm", linewidths=0.5, fmt=".2f", ax=ax)
     ax.set_title("Correlation Heatmap of Numerical Columns")
     st.pyplot(fig)
-
-##############################################################################################################
 
 elif option == 'ML':
     # Encoding Categorical Columns
@@ -317,7 +379,7 @@ elif option == 'ML':
     X_test = sc.transform(X_test)
 
     # Train the model
-    model = RandomForestClassifier(random_state=42)
+    model = RandomForestClassifier()
     model.fit(X_train, y_train)
 
     # Predictions and Accuracy
